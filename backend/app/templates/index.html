@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG Web Interface (Debug)</title>
+</head>
+<body>
+    <h1>RAG Web Interface (PDF + CPU)</h1>
+    <form method="post">
+        <label>Асуулт:</label><br>
+        <textarea name="question" rows="5" cols="60">{{ question }}</textarea><br><br>
+        <button type="submit">Илгээх</button>
+    </form>
+
+    {% if answer %}
+        <h2>Хариулт:</h2>
+        <pre>{{ answer }}</pre>
+    {% endif %}
+
+    {% if debug_log %}
+        <h2>Debug лог:</h2>
+        <pre>
+{% for line in debug_log %}
+{{ line }}
+{% endfor %}
+        </pre>
+    {% endif %}
+</body>
+</html>

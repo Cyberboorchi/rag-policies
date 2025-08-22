@@ -1,0 +1,53 @@
+1. Ollama сервер ажиллаж байгаа эсэхийг шалгах
+ 
+Invoke-RestMethod -Uri "http://localhost:11434/api/tags"
+ 
+2. Ollama API-г турших, Ollama серверийг гар аргаар embedding хийх боломжтой эсэхийг шалгах:
+
+Invoke-RestMethod -Uri "http://localhost:11434/api/embeddings" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{ "model": "nomic-embed-text", "prompt": "Тайлангийн түүх" }'
+
+3. Qdrant руу Document нэмэхийг турших
+
+Invoke-RestMethod -Uri "http://localhost:8000/add-document" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{ "id": 1, "text": "Тайлангийн агуулга нь санхүүгийн мэдээллийг багтаасан болно." }'
+
+4. Qdrant ажиллаж байгаа эсэхийг турших
+
+Invoke-RestMethod -Uri "http://localhost:6333"
+
+Invoke-RestMethod -Uri "http://localhost:8000/add-document" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{ "id": 15, "text": "Тайлангийн хүсэлтийн түүх" }'
+
+
+Шийдэл: Docker контейнер хоорондын холболт
+
+✅ 1. Docker network-д бүх контейнерүүдийг нэгтгэх
+
+docker network create rag-net
+
+
+✅ 2. Ollama, Qdrant, FastAPI контейнерүүдийг rag-net сүлжээнд холбох
+
+docker network connect rag-net ollama
+docker network connect rag-net qdrant
+docker network connect rag-net rag_app
+
+
+✅ 3. FastAPI апп дотор OLLAMA_URL-ийг http://ollama:11434 болгох
+FastAPI код дотор:
+
+
+
+Invoke-RestMethod -Uri "http://localhost:8000/ask" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{ "question": "тайлан" }'
+
+

@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.1
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    entrypoint: ["ollama", "serve"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  backend:
+    build: ./backend/app
+    container_name: rag_backend
+    env_file: .env
+    depends_on:
+      - qdrant
+      - ollama
+    environment:
+      QDRANT_URL: "http://qdrant:6333"
+      OLLAMA_URL: "http://ollama:11434"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: rag_frontend
+    env_file: .env
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: "http://backend:8000/ask"
+    ports:
+      - "5000:5000"
+
+volumes:
+  qdrant_storage:
+  ollama_data:
