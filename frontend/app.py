@@ -3,6 +3,7 @@
 from flask import Flask, render_template, request, jsonify
 import os
 import requests
+from datetime import date   
 
 app = Flask(__name__)
 
@@ -45,9 +46,18 @@ def chat():
     chat_history.append({"role": "assistant", "content": bot_msg})
     return jsonify({"reply": bot_msg})
 
-@app.route("/admin")
-def admin_page():
-    return render_template("admin.html")
+@app.route("/admin", methods=["GET", "POST"])
+def admin():
+    if request.method == "POST":
+        created_date = request.form.get("created_date")  # хэрэглэгч сонгосон эсвэл автоматаар өгөгдсөн огноо
+        
+        # хадгалсаныхаа дараа хуудсыг дахин render хийх
+        return render_template("admin.html", created_date=created_date)
+
+    # GET үед өнөөдрийн огноог автоматаар дамжуулна
+    return render_template("admin.html", created_date=date.today().isoformat())
+
+
 
 @app.route("/admin/add_doc", methods=["POST"])
 def add_doc_admin():

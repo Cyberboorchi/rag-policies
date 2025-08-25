@@ -1,173 +1,209 @@
 # backend/app.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct
-import os, requests, uuid, json
+from __future__ import annotations
+import os, uuid, json, logging, requests
+from typing import Any, Dict, List, Optional
 
-# ===========================
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from qdrant_client import QdrantClient
+from qdrant_client.http import models as rest
+
+from sentence_transformers import SentenceTransformer
+
+# =========================
 # Config
-# ===========================
+# =========================
 QDRANT_URL = os.getenv("QDRANT_URL")
 OLLAMA_URL = os.getenv("OLLAMA_URL")
-COLLECTION_NAME = "policies"
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "policies")
 
+EMBED_MODEL_ID = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+EMBED_VECTOR_SIZE = 384  # all-MiniLM-L6-v2
+EMBED_DISTANCE = "Cosine"
 
-# Models
-EMBED_MODEL = "nomic-embed-text:latest"  # embedding model
-CHAT_MODEL = "llama3:8b"            # updated chat/generation model
+CHAT_MODEL = os.getenv("CHAT_MODEL", "llama3:8b")
 
-# ===========================
-# FastAPI app & CORS
-# ===========================
-app = FastAPI()
-
-# CORS: frontend origin-оос fetch зөвшөөрөх
+# =========================
+# App & CORS
+# =========================
+app = FastAPI(title="RAG API (HF embeddings + Qdrant + Ollama)")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # эсвэл зөвхөн frontend URL-ийг: ["http://localhost:5500"]
+    allow_origins=["*"],  # хэрэгтэй бол нарийсгаарай
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Qdrant client
-qc = QdrantClient(url=QDRANT_URL)
+# =========================
+# Clients & Models
+# =========================
+log = logging.getLogger("uvicorn")
+qdrant = QdrantClient(url=QDRANT_URL)
+embed_model = SentenceTransformer(EMBED_MODEL_ID)
 
-# ===========================
-# Pydantic models
-# ===========================
+
+def ensure_collection():
+    """Qdrant-д collection байхгүй бол үүсгэнэ, тохиргоо таарахгүй байвал алдаа шиднэ."""
+    cols = qdrant.get_collections().collections
+    names = [c.name for c in cols]
+    if COLLECTION_NAME not in names:
+        qdrant.recreate_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=rest.VectorParams(size=EMBED_VECTOR_SIZE, distance=EMBED_DISTANCE),
+        )
+        log.info(f"Created collection '{COLLECTION_NAME}' (size={EMBED_VECTOR_SIZE}, distance={EMBED_DISTANCE}).")
+    else:
+        schema = qdrant.get_collection(COLLECTION_NAME)
+        print(schema)
+        # Хэмжээг зөрчихгүйг түрхэн шалгана (нарийвчлалд vector_params төрөл л хангалттай)
+        vs = schema.config.params.vectors
+        print(vs)
+        
+        current_size = None
+        if isinstance(vs, rest.VectorParams):
+            current_size = vs.size
+        elif isinstance(vs, rest.VectorParamsDiff):
+            current_size = vs.size
+        elif isinstance(vs, dict) and "size" in vs:
+            current_size = vs["size"]
+        if current_size and int(current_size) != EMBED_VECTOR_SIZE:
+            raise RuntimeError(
+                f"Collection '{COLLECTION_NAME}' vector size={current_size}, "
+                f"but embed model requires {EMBED_VECTOR_SIZE}. "
+                f"Please recreate the collection or change model."
+            )
+
+
+ensure_collection()
+
+# =========================
+# Schemas
+# =========================
+class Document(BaseModel):
+    text: str = Field(..., description="Баримтын үндсэн текст")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Нэмэлт талбарууд: title, chapter, section, ...")
+
 class Query(BaseModel):
     question: str
+    top_k: int = Field(5, ge=1, le=20)
 
-class Document(BaseModel):
-    text: str
-    metadata: dict | None = None  # metadata: title, author, date, tags, etc.
-
-# ===========================
-# Embedding function
-# ===========================
-def get_embedding(text: str):
-    url = f"{OLLAMA_URL}/v1/embeddings"
-    payload = {"model": EMBED_MODEL, "input": text}
+# =========================
+# Helpers
+# =========================
+def embed(text: str) -> List[float]:
     try:
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        return data["data"][0]["embedding"]
-    except requests.RequestException as e:
-        raise ValueError(f"Embedding API failed: {e}")
+        return embed_model.encode(text).tolist()
+    except Exception as e:
+        raise RuntimeError(f"Embedding failed: {e}")
 
-# ===========================
-# Insert document into Qdrant
-# ===========================
-def insert_doc(doc: Document):
-    embedding = get_embedding(doc.text)
-    point_id = str(uuid.uuid4())
+def trim_text(s: str, max_chars: int) -> str:
+    if len(s) <= max_chars:
+        return s
+    return s[:max_chars] + " …"
 
-    payload = {"text": doc.text}
-    if doc.metadata:
-        payload.update(doc.metadata)  # metadata fields added
-
-    qc.upsert(
-        collection_name=COLLECTION_NAME,
-        points=[PointStruct(id=point_id, vector=embedding, payload=payload)]
+def build_prompt(question: str, docs: List[Dict[str, Any]]) -> str:
+    # Document бүрээс 1200 тэмдэгт хүртэл авч, нийт 6000 орчим тэмдэгтэд барина
+    parts = []
+    total_target = 6000
+    per_doc = max(800, total_target // max(1, len(docs)))
+    for d in docs:
+        ctx = trim_text(d.get("text", ""), per_doc)
+        parts.append(f"- {ctx}")
+    context = "\n".join(parts)
+    prompt = (
+        "Дараах баримтуудыг суурь болгон Монгол хэлээр товч, тодорхой хариу бэлдэнэ үү.\n"
+        "Бүрэн итгэлгүй тохиолдолд \"мэдээлэл дутуу\" гэж онцол.\n\n"
+        f"Баримтууд:\n{context}\n\n"
+        f"Асуулт: {question}\n\n"
+        "Хариулт:"
     )
-    return point_id
+    return prompt
+
+def ollama_generate(prompt: str) -> str:
+    """Ollama /api/generate streaming JSON (newline-delimited)"""
+    url = f"{OLLAMA_URL}/api/generate"
+    payload = {"model": CHAT_MODEL, "prompt": prompt}
+    try:
+        with requests.post(url, json=payload, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            answer = []
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line.decode("utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                if "response" in item:
+                    answer.append(item["response"])
+                # item["done"] == True үед stream өндөрлөнө
+            return "".join(answer).strip()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Ollama generate failed: {e}")
+
+# =========================
+# Endpoints
+# =========================
+@app.get("/health")
+def health():
+    return {"status": "ok", "qdrant": QDRANT_URL, "ollama": OLLAMA_URL, "collection": COLLECTION_NAME}
 
 @app.post("/add_doc")
 def add_doc(doc: Document):
-    """
-    Admin endpoint to insert documents with metadata into Qdrant
-    """
+    """Баримт + metadata-г embedding болгоод Qdrant-д хадгална."""
     try:
-        doc_id = insert_doc(doc)
-        return {"status": "success", "id": doc_id, "payload": doc.dict()}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        vec = embed(doc.text)
+        pid = str(uuid.uuid4())
+        payload = {"text": doc.text}
+        if doc.metadata:
+            payload.update(doc.metadata)
 
-# ===========================
-# Multi-source retrieval
-# ===========================
-def retrieve_docs_multi(question: str, top_k=5):
-    results = []
-
-    # --- 1. Qdrant search ---
-    try:
-        vector = get_embedding(question)
-        qdrant_hits = qc.search(
+        qdrant.upsert(
             collection_name=COLLECTION_NAME,
-            query_vector=vector,
-            limit=top_k,
-            with_payload=True
+            points=[rest.PointStruct(id=pid, vector=vec, payload=payload)],
         )
-        for hit in qdrant_hits:
-            results.append({
-                "source": "qdrant",
-                "id": hit.id,
-                "score": hit.score,
-                "text": hit.payload.get("text", "")
-            })
+        return {"status": "success", "id": pid, "payload": payload}
     except Exception as e:
-        print("Qdrant search failed:", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Sort by score descending
-    results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
-    return results[:top_k]
-
-# ===========================
-# Generate context-aware answer via Ollama chat model
-# ===========================
-def generate_answer(question: str, docs: list):
-    if not docs:
-        return "Олдсон мэдээлэл байхгүй тул хариулт өгөх боломжгүй."
-
-    # Build context from retrieved docs
-    context_text = "\n".join([f"- {d['text']}" for d in docs])
-    print("Context for Ollama:", context_text)
-    print("Question for Ollama:", question)
-    
-    prompt = f"""Дараах мэдээллээр Монгол хэлээр хариу бэлдэнэ үү:Мэдээлэл:{context_text} Асуулт: {question} Хариулт:"""
-
-    print("Prompt for Ollama:", prompt)
-    url = f"{OLLAMA_URL}/v1/completions"
-    payload = {
-        "model": CHAT_MODEL,
-        "prompt": prompt
-    }
-
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        print("Ollama response:", data)
-        # answer = data.get("completion") or data.get("text") or ""
-        answer = data.get("choices", [{}])[0].get("text", "")
-        return answer.strip()
-    except requests.RequestException as e:
-        return f"Ollama completion API failed: {e}"
-
-# ===========================
-# /ask endpoint
-# ===========================
 @app.post("/ask")
-def ask(query: Query):
-    docs = retrieve_docs_multi(query.question)
+def ask(q: Query):
+    """Асуултыг embedding → Qdrant хайлт → контекст → Ollama хариу."""
+    try:
+        qvec = embed(q.question)
+        hits = qdrant.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=qvec,
+            limit=q.top_k,
+            with_payload=True,
+        )
 
-    # JSON format
-    json_result = {"question": query.question, "answers": docs}
+        docs = []
+        for h in hits:
+            docs.append({
+                "id": h.id,
+                "score": float(h.score),
+                "text": (h.payload or {}).get("text", ""),
+                "metadata": {k: v for k, v in (h.payload or {}).items() if k != "text"}
+            })
 
-    # Human-readable text
-    text_result = f"Асуулт: {query.question}\n\nХариултууд (document source-ууд):\n"
-    for i, d in enumerate(docs, start=1):
-        text_result += f"{i}. [{d['source']}] {d['text']}\n"
+        answer = ""
+        if docs:
+            prompt = build_prompt(q.question, docs)
+            try:
+                answer = ollama_generate(prompt)
+            except Exception as gen_err:
+                # Хэрэв Ollama уналаа гээд хайлтын үр дүнг JSON-оор буцаасаар байна
+                answer = f"(Анхааруулга) Генерац хийхэд алдаа: {gen_err}"
 
-    # Context-aware ChatGPT answer
-    # chatgpt_answer = generate_answer(query.question, docs)
-
-    return {
-        "json": json_result
-        # "text": text_result,
-        # "chatgpt_answer": chatgpt_answer
-    }
+        return {
+            "question": q.question,
+            "top_k": q.top_k,
+            "answers": docs,          # хайлтын үр дүн
+            "generated_answer": answer # Ollama-ийн хариу
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

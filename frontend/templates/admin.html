@@ -11,7 +11,7 @@
   <div class="max-w-3xl mx-auto bg-white p-6 rounded-xl shadow-lg">
     <h1 class="text-2xl font-bold mb-6">📑 Баримт оруулах</h1>
 
-    <form id="docForm" class="space-y-4">
+    <form id="docForm" class="space-y-4" method="POST">
       <!-- Text -->
       <div>
         <label class="block font-medium">Баримтын текст</label>
@@ -21,53 +21,55 @@
       <!-- Metadata -->
       <h2 class="text-xl font-semibold mt-6 mb-2">Metadata</h2>
 
-      <!-- Title (single select) -->
+      <!-- Title -->
       <div>
         <label class="block font-medium">Гарчиг (title)</label>
         <select name="title" class="w-full border rounded p-2" required>
-          <option value="">Сонгоно уу...</option>
+          <option value="Хөдөлмөрийн дотоод журам">Хөдөлмөрийн дотоод журам</option>
           <option value="Журам 1">Журам 1</option>
           <option value="Журам 2">Журам 2</option>
           <option value="Бодлого">Бодлого</option>
         </select>
       </div>
 
-      <!-- Chapter (single select) -->
+      <!-- Chapter -->
       <div>
         <label class="block font-medium">Бүлэг (chapter)</label>
         <select name="chapter" class="w-full border rounded p-2">
-          <option value="">Сонгоно уу...</option>
+          <option value="Нийтлэг үндэслэл" selected>Нийтлэг үндэслэл</option>
           <option value="Бүлэг 1">Бүлэг 1</option>
           <option value="Бүлэг 2">Бүлэг 2</option>
           <option value="Бүлэг 3">Бүлэг 3</option>
         </select>
       </div>
 
-      <!-- Section (single select) -->
+      <!-- Section -->
       <div>
         <label class="block font-medium">Хэсэг (section)</label>
         <select name="section" class="w-full border rounded p-2">
-          <option value="">Сонгоно уу...</option>
-          <option value="Хэсэг A">Хэсэг A</option>
+          <option value="Нэр томьёоны тодорхойлолт" selected>Нэр томьёоны тодорхойлолт</option>
           <option value="Хэсэг B">Хэсэг B</option>
           <option value="Хэсэг C">Хэсэг C</option>
         </select>
       </div>
 
+      <!-- Rule Number -->
+      <div>
+        <label class="block font-medium">Журмын дугаар</label>
+        <textarea name="rule_number" rows="2" class="w-full border rounded p-2" placeholder="Журмын дугаар эсвэл заалтыг энд бичнэ үү..."></textarea>
+      </div>
+
       <!-- Organization -->
       <div>
         <label class="block font-medium">Байгууллага (organization)</label>
-        <select name="organization" class="w-full border rounded p-2" required>
-          <option value="">Сонгоно уу...</option>
-          <option value="Тээвэр хөгжлийн банк">Тээвэр хөгжлийн банк</option>
-        </select>
+        <input type="text" name="organization" class="w-full border rounded p-2" value="Тээвэр хөгжлийн банк">
       </div>
 
-      <!-- Doc Type (multiple select) -->
+      <!-- Doc Type -->
       <div>
         <label class="block font-medium">Баримтын төрөл (doc_type)</label>
         <select name="doc_type" class="w-full border rounded p-2" multiple>
-          <option value="Журам">Журам</option>
+          <option value="Журам" selected>Журам</option> <!-- 🆕 selected нэмсэн -->
           <option value="Бодлого">Бодлого</option>
           <option value="Заавар">Заавар</option>
         </select>
@@ -76,7 +78,12 @@
       <!-- Created Date -->
       <div>
         <label class="block font-medium">Үүсгэсэн огноо (created_date)</label>
-        <input type="date" name="created_date" class="w-full border rounded p-2">
+        <input 
+          type="date" 
+          name="created_date" 
+          id="created_date"
+          class="w-full border rounded p-2"
+          value="{{ created_date or '' }}">
       </div>
 
       <!-- Tags -->
@@ -99,7 +106,6 @@
       e.preventDefault();
       const formData = new FormData(e.target);
 
-      // Oлон сонголттой fields-г авах
       const docTypes = formData.getAll("doc_type");
 
       const payload = {
@@ -108,6 +114,7 @@
           title: formData.get("title"),
           chapter: formData.get("chapter"),
           section: formData.get("section"),
+          rule_number: formData.get("rule_number"),  // 🆕
           organization: formData.get("organization"),
           doc_type: docTypes,
           created_date: formData.get("created_date"),
@@ -136,5 +143,16 @@
       }
     });
   </script>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('created_date').value = `${yyyy}-${mm}-${dd}`;
+    });
+  </script>
+
 </body>
 </html>
