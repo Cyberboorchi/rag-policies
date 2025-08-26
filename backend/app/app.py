@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
 from qdrant_client.http import models as rest
 
 from sentence_transformers import SentenceTransformer
@@ -49,33 +50,40 @@ def ensure_collection():
     """Qdrant-д collection байхгүй бол үүсгэнэ, тохиргоо таарахгүй байвал алдаа шиднэ."""
     cols = qdrant.get_collections().collections
     names = [c.name for c in cols]
+
     if COLLECTION_NAME not in names:
         qdrant.recreate_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=rest.VectorParams(size=EMBED_VECTOR_SIZE, distance=EMBED_DISTANCE),
+            vectors_config=VectorParams(size=EMBED_VECTOR_SIZE, distance=Distance.COSINE),
         )
-        log.info(f"Created collection '{COLLECTION_NAME}' (size={EMBED_VECTOR_SIZE}, distance={EMBED_DISTANCE}).")
+        log.info(
+            f"✅ Created collection '{COLLECTION_NAME}' "
+            f"(size={EMBED_VECTOR_SIZE}, distance=Distance.COSINE)."
+        )
     else:
         schema = qdrant.get_collection(COLLECTION_NAME)
-        print(schema)
-        # Хэмжээг зөрчихгүйг түрхэн шалгана (нарийвчлалд vector_params төрөл л хангалттай)
         vs = schema.config.params.vectors
-        print(vs)
-        
+
+        # → vectors нь dict эсвэл VectorParams байж болно
         current_size = None
-        if isinstance(vs, rest.VectorParams):
+        if isinstance(vs, VectorParams):
             current_size = vs.size
-        elif isinstance(vs, rest.VectorParamsDiff):
-            current_size = vs.size
-        elif isinstance(vs, dict) and "size" in vs:
-            current_size = vs["size"]
+        elif isinstance(vs, dict):
+            # multiple vector setup
+            first = list(vs.values())[0]
+            if isinstance(first, VectorParams):
+                current_size = first.size
+            elif isinstance(first, dict) and "size" in first:
+                current_size = first["size"]
+
         if current_size and int(current_size) != EMBED_VECTOR_SIZE:
             raise RuntimeError(
-                f"Collection '{COLLECTION_NAME}' vector size={current_size}, "
+                f"❌ Collection '{COLLECTION_NAME}' vector size={current_size}, "
                 f"but embed model requires {EMBED_VECTOR_SIZE}. "
                 f"Please recreate the collection or change model."
             )
-
+        else:
+            log.info(f"ℹ️ Collection '{COLLECTION_NAME}' already exists and matches size={EMBED_VECTOR_SIZE}.")
 
 ensure_collection()
 

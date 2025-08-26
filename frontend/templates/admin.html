@@ -35,11 +35,23 @@
       <!-- Chapter -->
       <div>
         <label class="block font-medium">Бүлэг (chapter)</label>
-        <select name="chapter" class="w-full border rounded p-2">
-          <option value="Нийтлэг үндэслэл" selected>Нийтлэг үндэслэл</option>
-          <option value="Бүлэг 1">Бүлэг 1</option>
-          <option value="Бүлэг 2">Бүлэг 2</option>
-          <option value="Бүлэг 3">Бүлэг 3</option>
+        <select name="chapter" id="chapter" class="w-full border rounded p-2">
+          <option value="1" {% if selected_chapter == '1' %}selected{% endif %}>Нийтлэг үндэслэл</option>
+          <option value="2" {% if selected_chapter == '2' %}selected{% endif %}>Ажлын байран дахь ялгаварлан гадуурхалт, дарамт, хүчирхийлэл, бэлгийн дарамтыг хориглох</option>
+          <option value="3" {% if selected_chapter == '3' %}selected{% endif %}>Банкны дотоод үйл ажиллагааны удирдлага, зохион байгуулалт</option>
+          <option value="4" {% if selected_chapter == '4' %}selected{% endif %}>Ажилтныг ажилд авах, хөдөлмөрийн гэрээ байгуулах</option> 
+          <option value="5" {% if selected_chapter == '5' %}selected{% endif %}>Ажилтныг ажил, албан тушаалд дэвшүүлэх, өөрчлөх, түр шилжүүлэх, сэлгэн ажиллуулах</option>
+          <option value="6" {% if selected_chapter == '6' %}selected{% endif %}>Ажил олгогч болон ажилтны эрх, үүрэг</option> 
+          <option value="7" {% if selected_chapter == '7' %}selected{% endif %}>Ажлын цаг ашиглалт, амралт, чөлөө олгох</option> 
+          <option value="8" {% if selected_chapter == '8' %}selected{% endif %}>Гэрээсээ, зайнаас, бүтэн бус цагаар, эсхүл дуудлагын цагаар ажиллах үеийн зохицуулалт</option> 
+          <option value="9" {% if selected_chapter == '9' %}selected{% endif %}>Цалин хөлс, хөнгөлөлт, тэтгэмж олгох</option> 
+          <option value="10" {% if selected_chapter == '10' %}selected{% endif %}>Шагнал, урамшуулал олгох, ажлын гүйцэтгэлийг үнэлэх</option>
+          <option value="11" {% if selected_chapter == '11' %}selected{% endif %}>Хөдөлмөрийн сахилга, эд хөрөнгийн хариуцлага</option>
+          <option value="12" {% if selected_chapter == '12' %}selected{% endif %}>Нийт ажилтнуудад хориглох зүйл</option>
+          <option value="13" {% if selected_chapter == '13' %}selected{% endif %}>Ажилтны хувийн мэдээлэл авах, боловсруулах, хадгалах, ашиглах</option>
+          <option value="14"> {% if selected_chapter == '14' %}selected{% endif %}Хөдөлмөрийн гэрээ  дуусгавар болох, ажил хүлээлцэх</option>
+          <option value="15" {% if selected_chapter == '15' %}selected{% endif %}>Хөгжлийн бэрхшээлтэй хүнийг хөдөлмөр эрхлүүлэх, оюутныг дагалднаар суралцуулах, дадлага хийлгэх</option> 
+          <option value="16" {% if selected_chapter == '16' %}selected{% endif %}>Дотоод журмын хэрэгжилт, хяналт</option>
         </select>
       </div>
 
@@ -48,7 +60,7 @@
         <label class="block font-medium">Хэсэг (section)</label>
         <select name="section" class="w-full border rounded p-2">
           <option value="Нэр томьёоны тодорхойлолт" selected>Нэр томьёоны тодорхойлолт</option>
-          <option value="Хэсэг B">Хэсэг B</option>
+          <option value="Журмын заалт" selected>Журмын заалт</option>
           <option value="Хэсэг C">Хэсэг C</option>
         </select>
       </div>
