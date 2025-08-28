@@ -12,6 +12,7 @@ from qdrant_client.models import Distance, VectorParams
 from qdrant_client.http import models as rest
 
 from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
 
 # =========================
 # Config
@@ -24,7 +25,9 @@ EMBED_MODEL_ID = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v
 EMBED_VECTOR_SIZE = 384  # all-MiniLM-L6-v2
 EMBED_DISTANCE = "Cosine"
 
-CHAT_MODEL = os.getenv("CHAT_MODEL", "llama3:8b")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "llama2:7b")
+GEMINI_API_KEY = os.getenv("AIzaSyAvl7_2PN2G_h-hwXU-V-AcynaGfj7q7FU")
+GEMINI_MODEL = "gemini-1.5-flash"  # эсвэл "gemini-1.5-pro"
 
 # =========================
 # App & CORS
@@ -130,12 +133,24 @@ def build_prompt(question: str, docs: List[Dict[str, Any]]) -> str:
     )
     return prompt
 
+def gemini_generate(prompt: str) -> str:
+    try:
+        import google.generativeai as genai
+        model = genai.GenerativeModel(model_name=GEMINI_MODEL)
+        response = model.generate_content(
+            [prompt],
+            api_key=GEMINI_API_KEY
+        )
+        return response.text.strip()
+    except Exception as e:
+        raise RuntimeError(f"Gemini generate failed: {e}")
+    
 def ollama_generate(prompt: str) -> str:
     """Ollama /api/generate streaming JSON (newline-delimited)"""
     url = f"{OLLAMA_URL}/api/generate"
     payload = {"model": CHAT_MODEL, "prompt": prompt}
     try:
-        with requests.post(url, json=payload, stream=True, timeout=120) as r:
+        with requests.post(url, json=payload, stream=True, timeout=300) as r:
             r.raise_for_status()
             answer = []
             for line in r.iter_lines():
@@ -177,9 +192,10 @@ def add_doc(doc: Document):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/ask")
 def ask(q: Query):
-    """Асуултыг embedding → Qdrant хайлт → контекст → Ollama хариу."""
+    """Асуултыг embedding → Qdrant хайлт → контекст → Gemini хариу."""
     try:
         qvec = embed(q.question)
         hits = qdrant.search(
@@ -202,16 +218,16 @@ def ask(q: Query):
         if docs:
             prompt = build_prompt(q.question, docs)
             try:
-                answer = ollama_generate(prompt)
+                answer = gemini_generate(prompt)
             except Exception as gen_err:
-                # Хэрэв Ollama уналаа гээд хайлтын үр дүнг JSON-оор буцаасаар байна
+                # Хэрэв Gemini уналаа гээд хайлтын үр дүнг JSON-оор буцаасаар байна
                 answer = f"(Анхааруулга) Генерац хийхэд алдаа: {gen_err}"
 
         return {
             "question": q.question,
             "top_k": q.top_k,
             "answers": docs,          # хайлтын үр дүн
-            "generated_answer": answer # Ollama-ийн хариу
+            "generated_answer": answer # Gemini-ийн хариу
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
