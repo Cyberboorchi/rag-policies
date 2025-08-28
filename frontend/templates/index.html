@@ -11,11 +11,11 @@
     </style>
 </head>
 <body>
-    <h2>Ollama Chat UI</h2>
+    <h2>Transbank ChatGPT v1.0 Demo</h2>
     <div id="chat-box"></div>
     <div id="input-box">
-        <input type="text" id="message" placeholder="Type your message..." size="50">
-        <button onclick="sendMessage()">Send</button>
+        <input type="text" id="message" placeholder="Ауултаа энд бичнэ үү..." size="100">
+        <button onclick="sendMessage()">Илгээх</button>
     </div>
 
     <script>
@@ -24,7 +24,7 @@
             if (!msg) return;
 
             let chatBox = document.getElementById("chat-box");
-            chatBox.innerHTML += `<div class='user'>User: ${msg}</div>`;
+            chatBox.innerHTML += `<div class='user'>Хэрэглэгч: ${msg}</div>`;
 
             let response = await fetch("/chat", {
                 method: "POST",
@@ -33,7 +33,7 @@
             });
 
             let data = await response.json();
-            chatBox.innerHTML += `<div class='bot'>Bot: ${data.reply}</div>`;
+            chatBox.innerHTML += `<div class='bot'>Transbank: ${data.reply}</div>`;
             document.getElementById("message").value = "";
             chatBox.scrollTop = chatBox.scrollHeight;
         }

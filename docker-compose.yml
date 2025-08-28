@@ -1,3 +1,4 @@
+
 services:
   qdrant:
     image: qdrant/qdrant:v1.15.1
@@ -7,25 +8,15 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    entrypoint: ["ollama", "serve"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
   backend:
     build: ./backend/app
     container_name: rag_backend
     env_file: .env
     depends_on:
       - qdrant
-      - ollama
     environment:
       QDRANT_URL: "http://qdrant:6333"
-      OLLAMA_URL: "http://ollama:11434"
+      GEMINI_API_KEY: AIzaSyDK4OzykQs5ZbopDWZJvqdrHL7a2i-bz7w
     ports:
       - "8000:8000"
 
@@ -42,4 +33,3 @@ services:
 
 volumes:
   qdrant_storage:
-  ollama_data:

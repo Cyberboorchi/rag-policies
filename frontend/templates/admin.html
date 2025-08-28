@@ -25,9 +25,14 @@
       <div>
         <label class="block font-medium">Гарчиг (title)</label>
         <select name="title" class="w-full border rounded p-2" required>
+
+          <option value="">Сонгоно уу...</option>
+          <option value="Мэдээллийн технологийн үйл ажиллагааны журам">Мэдээллийн технологийн үйл ажиллагааны журам</option>
+          <option value="Журам 2">Ii бүлэг: сервер, системийн удирдлага</option>
           <option value="Хөдөлмөрийн дотоод журам">Хөдөлмөрийн дотоод журам</option>
           <option value="Журам 1">Журам 1</option>
           <option value="Журам 2">Журам 2</option>
+
           <option value="Бодлого">Бодлого</option>
         </select>
       </div>
@@ -35,6 +40,11 @@
       <!-- Chapter -->
       <div>
         <label class="block font-medium">Бүлэг (chapter)</label>
+        <select name="chapter" class="w-full border rounded p-2">
+          <option value="">Сонгоно уу...</option>
+          <option value="I бүлэг: Ерөнхий үндэслэл">I бүлэг: Ерөнхий үндэслэл</option>
+          <option value="II бүлэг: Сервер, системийн удирдлага">II бүлэг: Сервер, системийн удирдлага</option>
+          <option value="Бүлэг 3">Бүлэг 3</option>
         <select name="chapter" id="chapter" class="w-full border rounded p-2">
           <option value="1" {% if selected_chapter == '1' %}selected{% endif %}>Нийтлэг үндэслэл</option>
           <option value="2" {% if selected_chapter == '2' %}selected{% endif %}>Ажлын байран дахь ялгаварлан гадуурхалт, дарамт, хүчирхийлэл, бэлгийн дарамтыг хориглох</option>
@@ -59,9 +69,15 @@
       <div>
         <label class="block font-medium">Хэсэг (section)</label>
         <select name="section" class="w-full border rounded p-2">
+          <option value="">Сонгоно уу...</option>
+          <option value="Нэг. Нийтлэг үндэслэл">Нэг. Нийтлэг үндэслэл</option>
+          <option value="Хоёр. Нэр томьёоны тодорхойлолт">Хоёр. Нэр томьёоны тодорхойлолт</option>
+          <option value="Гурав. Мониторингийн программ хангамж ашиглах болон банкны мэдээллийн технологид ашиглах тоног төхөөрөмж, тэдгээрт тавигдах шаардлага">Гурав. Мониторингийн программ хангамж ашиглах болон банкны мэдээллийн технологид ашиглах тоног төхөөрөмж, тэдгээрт тавигдах шаардлага</option>
+          <option value="Дөрөв. Үндсэн болон нөөцийн төвийн ерөнхий стандарт">Дөрөв. Үндсэн болон нөөцийн төвийн ерөнхий стандарт</option>
           <option value="Нэр томьёоны тодорхойлолт" selected>Нэр томьёоны тодорхойлолт</option>
           <option value="Журмын заалт" selected>Журмын заалт</option>
           <option value="Хэсэг C">Хэсэг C</option>
+
         </select>
       </div>
 

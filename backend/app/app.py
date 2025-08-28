@@ -1,233 +1,166 @@
-# backend/app.py
-from __future__ import annotations
-import os, uuid, json, logging, requests
-from typing import Any, Dict, List, Optional
-
+# backend/app/app.py
+import os, uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
-from qdrant_client.http import models as rest
-
-from sentence_transformers import SentenceTransformer
+from qdrant_client.models import PointStruct
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # =========================
 # Config
 # =========================
 QDRANT_URL = os.getenv("QDRANT_URL")
-OLLAMA_URL = os.getenv("OLLAMA_URL")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "policies")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+COLLECTION_NAME = "policies"
 
-EMBED_MODEL_ID = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-EMBED_VECTOR_SIZE = 384  # all-MiniLM-L6-v2
-EMBED_DISTANCE = "Cosine"
-
-CHAT_MODEL = os.getenv("CHAT_MODEL", "llama2:7b")
-GEMINI_API_KEY = os.getenv("AIzaSyAvl7_2PN2G_h-hwXU-V-AcynaGfj7q7FU")
-GEMINI_MODEL = "gemini-1.5-flash"  # эсвэл "gemini-1.5-pro"
+# Models (Gemini-г ашиглана)
+EMBED_MODEL_GEMINI = "models/text-embedding-004"
+CHAT_MODEL_GEMINI = "models/gemini-1.5-flash"
 
 # =========================
 # App & CORS
 # =========================
-app = FastAPI(title="RAG API (HF embeddings + Qdrant + Ollama)")
+app = FastAPI(title="RAG API (Gemini embeddings + Qdrant + Gemini)")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # хэрэгтэй бол нарийсгаарай
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# =========================
-# Clients & Models
-# =========================
-log = logging.getLogger("uvicorn")
-qdrant = QdrantClient(url=QDRANT_URL)
-embed_model = SentenceTransformer(EMBED_MODEL_ID)
+# Qdrant client
+qc = QdrantClient(url=QDRANT_URL)
 
-
-def ensure_collection():
-    """Qdrant-д collection байхгүй бол үүсгэнэ, тохиргоо таарахгүй байвал алдаа шиднэ."""
-    cols = qdrant.get_collections().collections
-    names = [c.name for c in cols]
-
-    if COLLECTION_NAME not in names:
-        qdrant.recreate_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=EMBED_VECTOR_SIZE, distance=Distance.COSINE),
-        )
-        log.info(
-            f"✅ Created collection '{COLLECTION_NAME}' "
-            f"(size={EMBED_VECTOR_SIZE}, distance=Distance.COSINE)."
-        )
-    else:
-        schema = qdrant.get_collection(COLLECTION_NAME)
-        vs = schema.config.params.vectors
-
-        # → vectors нь dict эсвэл VectorParams байж болно
-        current_size = None
-        if isinstance(vs, VectorParams):
-            current_size = vs.size
-        elif isinstance(vs, dict):
-            # multiple vector setup
-            first = list(vs.values())[0]
-            if isinstance(first, VectorParams):
-                current_size = first.size
-            elif isinstance(first, dict) and "size" in first:
-                current_size = first["size"]
-
-        if current_size and int(current_size) != EMBED_VECTOR_SIZE:
-            raise RuntimeError(
-                f"❌ Collection '{COLLECTION_NAME}' vector size={current_size}, "
-                f"but embed model requires {EMBED_VECTOR_SIZE}. "
-                f"Please recreate the collection or change model."
-            )
-        else:
-            log.info(f"ℹ️ Collection '{COLLECTION_NAME}' already exists and matches size={EMBED_VECTOR_SIZE}.")
-
-ensure_collection()
-
-# =========================
-# Schemas
-# =========================
-class Document(BaseModel):
-    text: str = Field(..., description="Баримтын үндсэн текст")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Нэмэлт талбарууд: title, chapter, section, ...")
-
+# ===========================
+# Pydantic models
+# ===========================
 class Query(BaseModel):
     question: str
-    top_k: int = Field(5, ge=1, le=20)
 
-# =========================
-# Helpers
-# =========================
-def embed(text: str) -> List[float]:
+class Document(BaseModel):
+    text: str
+    metadata: dict | None = None
+
+# ===========================
+# Embedding function (Gemini-г ашиглана)
+# ===========================
+def get_embedding(text: str):
+    """Gemini API-гаар embedding үүсгэнэ."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API түлхүүр тохируулагдаагүй байна.")
+    
     try:
-        return embed_model.encode(text).tolist()
-    except Exception as e:
-        raise RuntimeError(f"Embedding failed: {e}")
-
-def trim_text(s: str, max_chars: int) -> str:
-    if len(s) <= max_chars:
-        return s
-    return s[:max_chars] + " …"
-
-def build_prompt(question: str, docs: List[Dict[str, Any]]) -> str:
-    # Document бүрээс 1200 тэмдэгт хүртэл авч, нийт 6000 орчим тэмдэгтэд барина
-    parts = []
-    total_target = 6000
-    per_doc = max(800, total_target // max(1, len(docs)))
-    for d in docs:
-        ctx = trim_text(d.get("text", ""), per_doc)
-        parts.append(f"- {ctx}")
-    context = "\n".join(parts)
-    prompt = (
-        "Дараах баримтуудыг суурь болгон Монгол хэлээр товч, тодорхой хариу бэлдэнэ үү.\n"
-        "Бүрэн итгэлгүй тохиолдолд \"мэдээлэл дутуу\" гэж онцол.\n\n"
-        f"Баримтууд:\n{context}\n\n"
-        f"Асуулт: {question}\n\n"
-        "Хариулт:"
-    )
-    return prompt
-
-def gemini_generate(prompt: str) -> str:
-    try:
-        import google.generativeai as genai
-        model = genai.GenerativeModel(model_name=GEMINI_MODEL)
-        response = model.generate_content(
-            [prompt],
-            api_key=GEMINI_API_KEY
+        genai.configure(api_key=GEMINI_API_KEY)
+        response = genai.embed_content(
+            model=EMBED_MODEL_GEMINI,
+            content=text,
+            task_type="retrieval_document"
         )
+        return response['embedding']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Embedding үүсгэхэд алдаа гарлаа: {e}")
+
+# ===========================
+# Retrieval function
+# ===========================
+def retrieve_docs(question: str, top_k=5):
+    """Qdrant-аас холбогдох баримтыг хайна."""
+    results = []
+    try:
+        vector = get_embedding(question)
+        qdrant_hits = qc.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=vector,
+            limit=top_k,
+            with_payload=True
+        )
+
+        # Qdrant-ийн хайлтын үр дүнг оноогоор нь буурахаар эрэмбэлэх
+        sorted_hits = sorted(qdrant_hits, key=lambda hit: hit.score, reverse=True)
+
+        for hit in sorted_hits:
+            # Хариултын оноо 0.8-аас багагүй байх эсвэл хамааралгүй байвал хасах
+            if hit.score > 0.8:
+                payload = hit.payload or {}
+                results.append({
+                    "source": "qdrant",
+                    "id": hit.id,
+                    "score": hit.score,
+                    "text": payload.get("text", ""),
+                    "metadata": {k: v for k, v in payload.items() if k != "text"}
+                })
+            else:
+                # Хэрэв оноо бага бол цааш үргэлжлүүлэхгүй
+                continue
+
+    except Exception as e:
+        print(f"Qdrant хайлтад алдаа гарлаа: {e}")
+    return results
+
+
+# ===========================
+# Generation function (Gemini-г ашиглана)
+# ===========================
+def generate_answer_gemini(question: str, docs: list):
+    """Gemini API-г ашиглан хариулт үүсгэнэ."""
+    if not docs:
+        return "Олдсон мэдээлэл байхгүй тул хариулт өгөх боломжгүй."
+    
+    context_text = "\n".join([f"- {d.get('text', '')}" for d in docs])
+    prompt = f"""Өгөгдсөн мэдээлэлд үндэслэн асуултад Монгол хэлээр товч бөгөөд ойлгомжтой хариулт өгнө үү. Хэрэв мэдээлэлд хариулт байхгүй бол "Мэдээлэл дутмаг байна" гэж хариулна уу.
+
+Мэдээлэл:
+{context_text}
+
+Асуулт:
+{question}
+
+Хариулт:
+"""
+    try:
+        model = genai.GenerativeModel(CHAT_MODEL_GEMINI)
+        response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        raise RuntimeError(f"Gemini generate failed: {e}")
-    
-def ollama_generate(prompt: str) -> str:
-    """Ollama /api/generate streaming JSON (newline-delimited)"""
-    url = f"{OLLAMA_URL}/api/generate"
-    payload = {"model": CHAT_MODEL, "prompt": prompt}
-    try:
-        with requests.post(url, json=payload, stream=True, timeout=300) as r:
-            r.raise_for_status()
-            answer = []
-            for line in r.iter_lines():
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line.decode("utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                if "response" in item:
-                    answer.append(item["response"])
-                # item["done"] == True үед stream өндөрлөнө
-            return "".join(answer).strip()
-    except requests.RequestException as e:
-        raise RuntimeError(f"Ollama generate failed: {e}")
+        print(f"Gemini API-г дуудахад алдаа гарлаа: {e}")
+        return f"Gemini API-г дуудахад алдаа гарлаа: {e}"
 
-# =========================
-# Endpoints
-# =========================
-@app.get("/health")
-def health():
-    return {"status": "ok", "qdrant": QDRANT_URL, "ollama": OLLAMA_URL, "collection": COLLECTION_NAME}
-
+# ===========================
+# API Endpoints
+# ===========================
 @app.post("/add_doc")
 def add_doc(doc: Document):
     """Баримт + metadata-г embedding болгоод Qdrant-д хадгална."""
     try:
-        vec = embed(doc.text)
+        vec = get_embedding(doc.text)
         pid = str(uuid.uuid4())
         payload = {"text": doc.text}
         if doc.metadata:
             payload.update(doc.metadata)
-
-        qdrant.upsert(
+        qc.upsert(
             collection_name=COLLECTION_NAME,
-            points=[rest.PointStruct(id=pid, vector=vec, payload=payload)],
+            points=[PointStruct(id=pid, vector=vec, payload=payload)],
         )
         return {"status": "success", "id": pid, "payload": payload}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/ask")
-def ask(q: Query):
-    """Асуултыг embedding → Qdrant хайлт → контекст → Gemini хариу."""
+def ask(query: Query):
+    """Асуултад хариулт өгөх үндсэн endpoint (Gemini-г ашиглана)."""
     try:
-        qvec = embed(q.question)
-        hits = qdrant.search(
-            collection_name=COLLECTION_NAME,
-            query_vector=qvec,
-            limit=q.top_k,
-            with_payload=True,
-        )
-
-        docs = []
-        for h in hits:
-            docs.append({
-                "id": h.id,
-                "score": float(h.score),
-                "text": (h.payload or {}).get("text", ""),
-                "metadata": {k: v for k, v in (h.payload or {}).items() if k != "text"}
-            })
-
-        answer = ""
-        if docs:
-            prompt = build_prompt(q.question, docs)
-            try:
-                answer = gemini_generate(prompt)
-            except Exception as gen_err:
-                # Хэрэв Gemini уналаа гээд хайлтын үр дүнг JSON-оор буцаасаар байна
-                answer = f"(Анхааруулга) Генерац хийхэд алдаа: {gen_err}"
-
+        docs = retrieve_docs(query.question)
+        gemini_answer = generate_answer_gemini(query.question, docs)
         return {
-            "question": q.question,
-            "top_k": q.top_k,
-            "answers": docs,          # хайлтын үр дүн
-            "generated_answer": answer # Gemini-ийн хариу
+            "question": query.question,
+            "retrieved_docs": docs,
+            "gemini_answer": gemini_answer
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
