@@ -1,2 +1,3 @@
 Flask
 requests
+sentence_transformers

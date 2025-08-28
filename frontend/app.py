@@ -3,6 +3,7 @@ import os
 import requests
 from datetime import date
 from typing import cast, Dict, Any
+from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 
@@ -10,25 +11,12 @@ app = Flask(__name__)
 BACKEND_ASK_URL = os.getenv("BACKEND_URL", "http://backend:8000/ask")
 BACKEND_ADD_URL = os.getenv("BACKEND_ADD_URL", "http://backend:8000/add_doc")
 
-# Дотоод журмын бүлгүүдийн мэдээлэл
-CHAPTER_MAP = {
-    "1": "Нийтлэг үндэслэл",
-    "2": "Ажлын байран дахь ялгаварлан гадуурхалт, дарамт, хүчирхийлэл, бэлгийн дарамтыг хориглох",
-    "3": "Банкны дотоод үйл ажиллагааны удирдлага, зохион байгуулалт",
-    "4": "Ажилтныг ажилд авах, хөдөлмөрийн гэрээ байгуулах",
-    "5": "Ажилтныг ажил, албан тушаалд дэвшүүлэх, өөрчлөх, түр шилжүүлэх, сэлгэн ажиллуулах",
-    "6": "Ажил олгогч болон ажилтны эрх, үүрэг",
-    "7": "Ажлын цаг ашиглалт, амралт, чөлөө олгох",
-    "8": "Гэрээсээ, зайнаас, бүтэн бус цагаар, эсхүл дуудлагын цагаар ажиллах үеийн зохицуулалт", 
-    "9": "Цалин хөлс, хөнгөлөлт, тэтгэмж олгох",
-    "10": "Шагнал, урамшуулал олгох, ажлын гүйцэтгэлийг үнэлэх",
-    "11": "Хөдөлмөрийн сахилга, эд хөрөнгийн хариуцлага",
-    "12": "Нийт ажилтнуудад хориглох зүйл", 
-    "13": "Ажилтны хувийн мэдээлэл авах, боловсруулах, хадгалах, ашиглах",
-    "14": "Хөдөлмөрийн гэрээ дуусгавар болох, ажил хүлээлцэх", 
-    "15": "Хөгжлийн бэрхшээлтэй хүнийг хөдөлмөр эрхлүүлэх, оюутныг дагалднаар суралцуулах, дадлага хийлгэх",
-    "16": "Дотоод журмын хэрэгжилт, хяналт"
-}
+try:
+    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+except ImportError:
+    # Хэрэв sentence_transformers суулгаагүй бол алдаа мэдэгдэл өгнө
+    print("Суулгаагүй байна: pip install -U sentence-transformers")
+    model = None
 
 chat_history = []
 
@@ -84,7 +72,6 @@ def admin():
     """Админ хуудсыг харуулах endpoint."""
     return render_template(
         "admin.html",
-        chapters=CHAPTER_MAP,
         created_date=date.today().isoformat()
     )
 
@@ -92,20 +79,31 @@ def admin():
 def add_doc_admin():
     """Админ хуудаснаас баримт нэмэх хүсэлтийг боловсруулах endpoint."""
     data = cast(Dict[str, Any], request.get_json(silent=True) or {})
-    doc_text = data.get("text")
-    chapter_key = data.get("chapter")
+    doc_text = data.get("text")    
     metadata = data.get("metadata", {})
 
-    if not doc_text or not chapter_key:
-        return jsonify({"error": "Text and chapter are required"}), 400
+    if not doc_text:
+        return jsonify({"error": "Text is required"}), 400
 
-    chapter_text = CHAPTER_MAP.get(chapter_key, f"Бүлэг {chapter_key}")
-    metadata["chapter"] = chapter_text
+    if not model:
+        return jsonify({"error": "Embedding model is not loaded."}), 500
+    
+    # 🆕 Энд текстийг вектор болгож байна
+    try:
+        doc_vector = model.encode(doc_text).tolist()
+    except Exception as e:
+        return jsonify({"error": f"Failed to create vector: {e}"}), 500
+    
 
-    payload = {"text": doc_text, "metadata": metadata}
+
+    payload = {
+        "text": doc_text, 
+        "metadata": metadata,
+        "vector": doc_vector  # 🆕 Үүсгэсэн векторыг нэмлээ
+    }
 
     try:
-        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=10)
+        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=120)
         resp.raise_for_status()
         return jsonify(resp.json())
     except requests.RequestException as e:
