@@ -1,7 +1,7 @@
 
 services:
   qdrant:
-    image: qdrant/qdrant:v1.15.1
+    image: qdrant/qdrant
     container_name: qdrant
     ports:
       - "6333:6333"
@@ -9,8 +9,8 @@ services:
       - qdrant_storage:/qdrant/storage
 
   backend:
-    build: ./backend/app
-    container_name: rag_backend
+    build: ./backend
+    container_name: backend
     env_file: .env
     depends_on:
       - qdrant
@@ -22,7 +22,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: rag_frontend
+    container_name: frontend
     env_file: .env
     depends_on:
       - backend
