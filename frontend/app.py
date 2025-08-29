@@ -3,20 +3,12 @@ import os
 import requests
 from datetime import date
 from typing import cast, Dict, Any
-from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 
 # Backend API-н endpoint-уудыг тохируулна
 BACKEND_ASK_URL = os.getenv("BACKEND_URL", "http://backend:8000/ask")
 BACKEND_ADD_URL = os.getenv("BACKEND_ADD_URL", "http://backend:8000/add_doc")
-
-try:
-    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-except ImportError:
-    # Хэрэв sentence_transformers суулгаагүй бол алдаа мэдэгдэл өгнө
-    print("Суулгаагүй байна: pip install -U sentence-transformers")
-    model = None
 
 chat_history = []
 
@@ -85,21 +77,10 @@ def add_doc_admin():
     if not doc_text:
         return jsonify({"error": "Text is required"}), 400
 
-    if not model:
-        return jsonify({"error": "Embedding model is not loaded."}), 500
-    
-    # 🆕 Энд текстийг вектор болгож байна
-    try:
-        doc_vector = model.encode(doc_text).tolist()
-    except Exception as e:
-        return jsonify({"error": f"Failed to create vector: {e}"}), 500
-    
-
 
     payload = {
         "text": doc_text, 
         "metadata": metadata,
-        "vector": doc_vector  # 🆕 Үүсгэсэн векторыг нэмлээ
     }
 
     try:

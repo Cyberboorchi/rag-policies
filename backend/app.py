@@ -47,14 +47,18 @@ class Document(BaseModel):
     text: str
     metadata: dict | None = None
 
+# API-г тохируулна
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("Gemini API амжилттай тохируулагдлаа.")
+else:
+    print("Алдаа: GEMINI_API_KEY орчны хувьсагчид тохируулагдаагүй байна.")
+
 # ===========================
 # Embedding function (Gemini-г ашиглана)
 # ===========================
-def get_embedding(text: str):
-    """Gemini API-гаар embedding үүсгэнэ."""
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API түлхүүр тохируулагдаагүй байна.")
-    
+def get_document_embedding(text: str):
+    """Баримтыг вектор болгох функц."""
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         response = genai.embed_content(
@@ -66,6 +70,22 @@ def get_embedding(text: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Embedding үүсгэхэд алдаа гарлаа: {e}")
 
+
+def get_query_embedding(text: str):
+    """Хайлт хийх асуулгыг вектор болгох функц."""
+    
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        response = genai.embed_content(
+            model=EMBED_MODEL_GEMINI,
+            content=text,
+            task_type="retrieval_query"
+        )
+        return response['embedding']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Embedding үүсгэхэд алдаа гарлаа: {e}")
+    
+
 # ===========================
 # Retrieval function
 # ===========================
@@ -73,7 +93,7 @@ def retrieve_docs(question: str, top_k=5):
     """Qdrant-аас холбогдох баримтыг хайна."""
     results = []
     try:
-        vector = get_embedding(question)
+        vector = get_query_embedding(question)
         qdrant_hits = qc.search(
             collection_name=COLLECTION_NAME,
             query_vector=vector,
@@ -85,8 +105,8 @@ def retrieve_docs(question: str, top_k=5):
         sorted_hits = sorted(qdrant_hits, key=lambda hit: hit.score, reverse=True)
 
         for hit in sorted_hits:
-            # Хариултын оноо 0.8-аас багагүй байх эсвэл хамааралгүй байвал хасах
-            if hit.score > 0.8:
+            # Хариултын оноо 0.5-аас багагүй байх эсвэл хамааралгүй байвал хасах
+            if hit.score > 0.5:
                 payload = hit.payload or {}
                 results.append({
                     "source": "qdrant",
@@ -138,7 +158,7 @@ def generate_answer_gemini(question: str, docs: list):
 def add_doc(doc: Document):
     """Баримт + metadata-г embedding болгоод Qdrant-д хадгална."""
     try:
-        vec = get_embedding(doc.text)
+        vec = get_document_embedding(doc.text)
         pid = str(uuid.uuid4())
         payload = {"text": doc.text}
         if doc.metadata:
