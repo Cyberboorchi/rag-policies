@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ollama Chat UI</title>
+    <title>Transbank ChatGPT v1.0 Demo</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         #chat-box { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: scroll; }
@@ -37,6 +37,15 @@
             document.getElementById("message").value = "";
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
+        // Энэ функцийг нэмж өгнө
+        function handleKeyPress(event) {
+            // "Enter" товч дарсан эсэхийг шалгах (keycode 13)
+            if (event.keyCode === 13) {
+                sendMessage();
+            }
+        }
+        
     </script>
 </body>
 </html>
