@@ -1,116 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Transbank ChatGPT v2.2 Туршилтын хувилбар</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f2f5; }
-        h2 { text-align: center; }
-        #chat-box { 
-            border: 1px solid #ccc; 
-            padding: 10px; 
-            height: 400px; 
-            overflow-y: auto; 
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        /* Хэрэглэгчийн асуулт */
-        .user { 
-            color: #000;
-            background-color: #f6f6f6;
-            margin: 5px 0; 
-            padding: 8px 12px;
-            border-radius: 12px;
-            max-width: 60%;
-            float: right;
-            clear: both;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            white-space: pre-wrap;
-        }
-
-        /* Ботын хариулт */
-        .bot { 
-            display: flex;
-            align-items: flex-start;
-            color: #000000; 
-            margin: 5px 0; 
-            padding: 8px 12px;
-            border-radius: 12px;
-            max-width: 70%;
-            background-color: #f1f1f1;
-            float: left;
-            clear: both;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            white-space: pre-wrap;
-        }
-
-        .bot-logo {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            margin-right: 8px;
-            flex-shrink: 0;
-        }
-
-        .bot-content {
-            flex: 1;
-        }
-
-        /* typing dots */
-        .typing-dots {
-            display: inline-block;
-        }
-        .typing-dots span {
-            display: inline-block;
-            width: 6px;
-            height: 6px;
-            margin: 0 2px;
-            background: #555;
-            border-radius: 50%;
-            animation: blink 1.4s infinite both;
-        }
-        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes blink {
-            0%, 80%, 100% { opacity: 0; }
-            40% { opacity: 1; }
-        }
-
-        #input-box { margin-top: 10px; text-align: center; }
-        #input-box input {
-            width: 70%;
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-        }
-        #input-box button {
-            padding: 8px 15px;
-            border-radius: 5px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        #input-box button:disabled {
-            background-color: #aaa;
-            cursor: not-allowed;
-        }
-        #input-box button:hover:enabled {
-            background-color: #0056b3;
-        }
-    </style>
+    <title>Transbank ChatGPT v1.0 Туршилтын хувилбар</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <h2>Transbank ChatGPT v2.2 Туршилтын хувилбар</h2>
+    <div class="chat-container">
+    <h2>Transbank ChatGPT v1.0 Туршилтын хувилбар</h2>
     <div id="chat-box"></div>
     <div id="input-box">
         <input type="text" id="message" placeholder="Асуултаа энд бичнэ үү..." onkeydown="handleKeyPress(event)">
         <button onclick="sendMessage()" id="sendBtn">Илгээх</button>
+    </div>
     </div>
 
     <script>
@@ -138,7 +39,7 @@
             botMsgDiv.classList.add('bot');
             botMsgDiv.innerHTML = `
                 <img src="/static/img/transbank-logo.png" alt="Transbank" class="bot-logo">
-                <div class="bot-content"><i>. <span class="typing-dots"><span></span><span></span><span></span></span></i></div>
+                <div class="bot-content"><i><span class="typing-dots"><span></span><span></span><span></span></span></i></div>
             `;
             chatBox.appendChild(botMsgDiv);
             chatBox.scrollTop = chatBox.scrollHeight;
@@ -190,5 +91,6 @@
             if (event.key === "Enter") sendMessage();
         }
     </script>
+
 </body>
 </html>

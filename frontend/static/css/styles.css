@@ -1,0 +1,128 @@
+/* frontend/static/css/styles.css */
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background-color: #f0f2f5;
+
+    /* Add these lines to center the content */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Chat container-т өндөр өгөх хэрэгтэй */
+.chat-container {
+    width: 90%; 
+    max-width: 1000px;
+    height: 80vh; /* Эцэг болсон chat-container-ийн өндрийг дэлгэцийн 80% болгож уян хатан болгоно */
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column; /* Босоо байдлаар байрлуулах */
+    justify-content: space-between;
+}
+
+h2 { 
+    text-align: center; 
+}
+#chat-box { 
+    border: 1px solid #ccc; 
+    padding: 10px; 
+    height: 70%; /* Эцэг элементийнхээ 70%-ийг эзэлнэ */
+    max-height: 800px; /* Гэхдээ 800px-ээс хэтрэхгүй */
+    overflow-y: auto; 
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Хэрэглэгчийн асуулт */
+.user { 
+    color: #000;
+    background-color: #f6f6f6;
+    margin: 5px 0; 
+    padding: 8px 12px;
+    border-radius: 12px;
+    max-width: 60%;
+    float: right;
+    clear: both;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+}
+/* Ботын хариулт */
+.bot { 
+    display: flex;
+    align-items: flex-start;
+    color: #000000; 
+    margin: 5px 0; 
+    padding: 8px 12px;
+    border-radius: 12px;
+    max-width: 70%;
+    background-color: #f1f1f1; /* Change this line */
+    float: left;
+    clear: both;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+}
+.bot-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+.bot-content {
+    flex: 1;
+}
+/* typing dots */
+.typing-dots {
+    display: inline-block;
+}
+.typing-dots span {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin: 0 2px;
+    background: #ffffff;
+    border-radius: 50%;
+    animation: blink 1.4s infinite both;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink {
+    0%, 80%, 100% { opacity: 0; }
+    40% { opacity: 1; }
+}
+#input-box { 
+    margin-top: 10px; 
+    text-align: center; 
+}
+#input-box input {
+    width: 70%;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+#input-box button {
+    padding: 8px 15px;
+    border-radius: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+#input-box button:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+}
+#input-box button:hover:enabled {
+    background-color: #0056b3;
+}
