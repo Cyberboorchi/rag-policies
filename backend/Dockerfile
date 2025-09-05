@@ -1,6 +1,14 @@
 FROM python:3.11-slim
 
+# системийн хэрэгцээтэй пакетууд
+RUN apt-get update && apt-get install -y curl unzip
+
+# Ollama CLI татаж суулгах
+RUN curl -L https://ollama.com/download/ollama-linux -o /usr/local/bin/ollama && \
+    chmod +x /usr/local/bin/ollama
+
 WORKDIR /app
+COPY . /app
 
 # Copy requirements first
 COPY requirements.txt .

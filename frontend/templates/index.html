@@ -3,15 +3,22 @@
 <head>
     <title>Transbank ChatGPT v1.0 Туршилтын хувилбар</title>
     <link rel="stylesheet" href="/static/css/styles.css">
+
+    <!-- Markdown хөрвүүлэгч -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Highlight.js (code syntax highlight) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </head>
 <body>
     <div class="chat-container">
-    <h2>Transbank ChatGPT v1.0 Туршилтын хувилбар</h2>
-    <div id="chat-box"></div>
-    <div id="input-box">
-        <input type="text" id="message" placeholder="Асуултаа энд бичнэ үү..." onkeydown="handleKeyPress(event)">
-        <button onclick="sendMessage()" id="sendBtn">Илгээх</button>
-    </div>
+        <h2>Transbank ChatGPT v1.0 Туршилтын хувилбар</h2>
+        <div id="chat-box"></div>
+        <div id="input-box">
+            <input type="text" id="message" placeholder="Асуултаа энд бичнэ үү..." onkeydown="handleKeyPress(event)">
+            <button onclick="sendMessage()" id="sendBtn">Илгээх</button>
+        </div>
     </div>
 
     <script>
@@ -29,12 +36,9 @@
             if (!msg) return;
 
             chatBox.innerHTML += `<div class='user'>${msg}</div>`;
-
-            // хэрэглэгчийн input disable
             inputBox.disabled = true;
             sendBtn.disabled = true;
 
-            // "Transbank ... бодож байна" animation
             let botMsgDiv = document.createElement('div');
             botMsgDiv.classList.add('bot');
             botMsgDiv.innerHTML = `
@@ -53,32 +57,61 @@
                 });
 
                 let data = await response.json();
-
-                // typing effect character by character
-                let replyText = data.reply;
                 let contentDiv = botMsgDiv.querySelector(".bot-content");
-                contentDiv.innerHTML = "";
-                let i = 0;
 
-                function typeWriter() {
-                    if (i < replyText.length) {
-                        contentDiv.innerHTML += replyText.charAt(i);
-                        i++;
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                        setTimeout(typeWriter, 20); // typing хурд
-                    } else {
-                        // input эргүүлэн идэвхжүүлэх
-                        inputBox.disabled = false;
-                        sendBtn.disabled = false;
-                        inputBox.focus();
-                        // түүх хадгалах
-                        localStorage.setItem('chatHistory', chatBox.innerHTML);
+                // 429 алдаа ирсэн тохиолдол
+                if (response.status === 429 && data.retry_delay) {
+                    let seconds = data.retry_delay.seconds || 5;
+                    contentDiv.innerHTML = `Quota limit exceeded. Retry in <span id="timer">${seconds}</span> seconds.`;
+
+                    let timer = document.getElementById("timer");
+                    let interval = setInterval(() => {
+                        seconds--;
+                        timer.innerText = seconds;
+                        if (seconds <= 0) {
+                            clearInterval(interval);
+                            contentDiv.innerHTML = "Та одоо дахин оролдож болно.";
+                            inputBox.disabled = false;
+                            sendBtn.disabled = false;
+                            inputBox.focus();
+                        }
+                    }, 1000);
+
+                } else {
+                    // Typing animation Markdown text дээр
+                    let replyText = data.reply;
+                    contentDiv.innerHTML = "";
+                    let i = 0;
+
+                    function typeWriter() {
+                        if (i < replyText.length) {
+                            contentDiv.innerText += replyText.charAt(i);
+                            i++;
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                            setTimeout(typeWriter, 20);
+                        } else {
+                            // Markdown → HTML хөрвүүлэлт
+                            let finalHTML = marked.parse(contentDiv.innerText);
+                            contentDiv.innerHTML = finalHTML;
+
+                            // Code block highlight
+                            contentDiv.querySelectorAll("pre code").forEach((block) => {
+                                hljs.highlightElement(block);
+                            });
+
+                            inputBox.disabled = false;
+                            sendBtn.disabled = false;
+                            inputBox.focus();
+
+                            // Түүх хадгалах
+                            localStorage.setItem('chatHistory', chatBox.innerHTML);
+                        }
                     }
+
+                    typeWriter();
                 }
-                typeWriter();
 
             } catch (err) {
-                let contentDiv = botMsgDiv.querySelector(".bot-content");
                 contentDiv.innerHTML = `<span style="color:red;">Алдаа гарлаа: ${err.message}</span>`;
                 inputBox.disabled = false;
                 sendBtn.disabled = false;
@@ -91,6 +124,5 @@
             if (event.key === "Enter") sendMessage();
         }
     </script>
-
 </body>
 </html>

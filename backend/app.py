@@ -5,7 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
-import google.generativeai as genai
+import requests
+import json
+import subprocess
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -15,17 +17,17 @@ load_dotenv()
 # Config
 # =========================
 QDRANT_URL = os.getenv("QDRANT_URL")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-COLLECTION_NAME = "policies"
+OLLAMA_URL = os.getenv("OLLAMA_URL")
 
-# Models (Gemini-г ашиглана)
-EMBED_MODEL_GEMINI = "models/text-embedding-004"
-CHAT_MODEL_GEMINI = "models/gemini-1.5-flash"
+COLLECTION_NAME = "policies_ollama"
+
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+CHAT_MODEL = os.getenv("CHAT_MODEL")
 
 # =========================
 # App & CORS
 # =========================
-app = FastAPI(title="RAG API (Gemini embeddings + Qdrant + Gemini)")
+app = FastAPI(title="RAG API (FastAPI + Qdrant + Ollama)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -47,44 +49,19 @@ class Document(BaseModel):
     text: str
     metadata: dict | None = None
 
-# API-г тохируулна
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    print("Gemini API амжилттай тохируулагдлаа.")
-else:
-    print("Алдаа: GEMINI_API_KEY орчны хувьсагчид тохируулагдаагүй байна.")
 
-# ===========================
-# Embedding function (Gemini-г ашиглана)
-# ===========================
-def get_document_embedding(text: str):
-    """Баримтыг вектор болгох функц."""
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        response = genai.embed_content(
-            model=EMBED_MODEL_GEMINI,
-            content=text,
-            task_type="retrieval_document"
-        )
-        return response['embedding']
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Embedding үүсгэхэд алдаа гарлаа: {e}")
+def get_query_embedding_ollama(text: str):
+    payload = {
+        "model": EMBEDDING_MODEL,
+        "prompt": text
+    }
+    response = requests.post(f"{OLLAMA_URL}/api/embeddings", json=payload)
+    if response.status_code != 200:
+        raise Exception(f"Ollama embedding error: {response.text}")
+    data = response.json()
+    return data["embedding"]
 
-
-def get_query_embedding(text: str):
-    """Хайлт хийх асуулгыг вектор болгох функц."""
-    
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        response = genai.embed_content(
-            model=EMBED_MODEL_GEMINI,
-            content=text,
-            task_type="retrieval_query"
-        )
-        return response['embedding']
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Embedding үүсгэхэд алдаа гарлаа: {e}")
-    
+  
 
 # ===========================
 # Retrieval function
@@ -93,7 +70,8 @@ def retrieve_docs(question: str, top_k=5):
     """Qdrant-аас холбогдох баримтыг хайна."""
     results = []
     try:
-        vector = get_query_embedding(question)
+        # vector = get_query_embedding(question)
+        vector = get_query_embedding_ollama(question)
         qdrant_hits = qc.search(
             collection_name=COLLECTION_NAME,
             query_vector=vector,
@@ -123,33 +101,22 @@ def retrieve_docs(question: str, top_k=5):
         print(f"Qdrant хайлтад алдаа гарлаа: {e}")
     return results
 
+def query_ollama(prompt, model=CHAT_MODEL):
+    payload = {"model": model, "prompt": prompt, "stream": False}
+    resp = requests.post(f"{OLLAMA_URL}/api/generate", json=payload)
+    if resp.status_code != 200:
+        raise Exception(f"Ollama generate error: {resp.text}")
+    return resp.json().get("response", "").strip()
 
-# ===========================
-# Generation function (Gemini-г ашиглана)
-# ===========================
-def generate_answer_gemini(question: str, docs: list):
-    """Gemini API-г ашиглан хариулт үүсгэнэ."""
-    if not docs:
-        return "Олдсон мэдээлэл байхгүй тул хариулт өгөх боломжгүй."
-    
-    context_text = "\n".join([f"- {d.get('text', '')}" for d in docs])
-    prompt = f"""Өгөгдсөн мэдээлэлд үндэслэн асуултад Монгол хэлээр товч бөгөөд ойлгомжтой хариулт өгнө үү. Хэрэв мэдээлэлд хариулт байхгүй бол "Мэдээлэл дутмаг байна" гэж хариулна уу.
-
-Мэдээлэл:
-{context_text}
-
-Асуулт:
-{question}
-
-Хариулт:
-"""
-    try:
-        model = genai.GenerativeModel(CHAT_MODEL_GEMINI)
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        print(f"Gemini API-г дуудахад алдаа гарлаа: {e}")
-        return f"Gemini API-г дуудахад алдаа гарлаа: {e}"
+def generate_answer_ollama(question, docs):
+    """
+    Question + retrieved docs ашиглан Ollama model-оор хариулт үүсгэх
+    """
+    # Docs-ийг нэг текст болгон нийлүүлэх
+    context = "\n\n".join(d["text"] for d in docs)
+    print("context", context)
+    prompt = f"Question: {question}\n\nContext:\n{context}\n\nAnswer:"
+    return query_ollama(prompt)
 
 # ===========================
 # API Endpoints
@@ -158,7 +125,8 @@ def generate_answer_gemini(question: str, docs: list):
 def add_doc(doc: Document):
     """Баримт + metadata-г embedding болгоод Qdrant-д хадгална."""
     try:
-        vec = get_document_embedding(doc.text)
+        # vec = get_document_embedding(doc.text)
+        vec = get_query_embedding_ollama(doc.text)
         pid = str(uuid.uuid4())
         payload = {"text": doc.text}
         if doc.metadata:
@@ -171,16 +139,17 @@ def add_doc(doc: Document):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/ask")
 def ask(query: Query):
-    """Асуултад хариулт өгөх үндсэн endpoint (Gemini-г ашиглана)."""
+    
     try:
         docs = retrieve_docs(query.question)
-        gemini_answer = generate_answer_gemini(query.question, docs)
+        ollama_answer = generate_answer_ollama(query.question, docs)
         return {
             "question": query.question,
             "retrieved_docs": docs,
-            "gemini_answer": gemini_answer
+            "ollama_answer": ollama_answer
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

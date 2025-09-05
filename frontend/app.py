@@ -29,11 +29,11 @@ def chat():
     payload = {"question": user_msg}
 
     try:
-        resp = requests.post(BACKEND_ASK_URL, json=payload, timeout=120)
+        resp = requests.post(BACKEND_ASK_URL, json=payload, timeout=300)
         resp.raise_for_status()
         backend_data = resp.json()
 
-        generated_answer = backend_data.get("gemini_answer", "Хариу олдсонгүй.")
+        generated_answer = backend_data.get("ollama_answer", "Хариу олдсонгүй.")
         retrieved_docs = backend_data.get("retrieved_docs", [])
 
         # Зөвхөн оноо нь 0.8-аас дээш эсвэл хамааралтай эх сурвалжийг шүүж харуулах
@@ -84,7 +84,7 @@ def add_doc_admin():
     }
 
     try:
-        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=120)
+        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=300)
         resp.raise_for_status()
         return jsonify(resp.json())
     except requests.RequestException as e:
