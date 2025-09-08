@@ -29,7 +29,7 @@ def chat():
     payload = {"question": user_msg}
 
     try:
-        resp = requests.post(BACKEND_ASK_URL, json=payload, timeout=300)
+        resp = requests.post(BACKEND_ASK_URL, json=payload, timeout=600)
         resp.raise_for_status()
         backend_data = resp.json()
 
@@ -84,7 +84,7 @@ def add_doc_admin():
     }
 
     try:
-        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=300)
+        resp = requests.post(BACKEND_ADD_URL, json=payload, timeout=600)
         resp.raise_for_status()
         return jsonify(resp.json())
     except requests.RequestException as e:

@@ -58,21 +58,26 @@ else:
 # =========================
 # Scroll and migrate data with offset & duplicate check
 # =========================
-BATCH_SIZE = 50
-offset = 0
+# =========================
+# Өгөгдлийг шилжүүлэх
+# =========================
+
+already_seen = set() # Энэ хувьсагчийг хэрэглэхийн өмнө зарлах ёстой
 total_processed = 0
-already_seen = set()  # Duplicate check
 total_points = qc.count(collection_name=OLD_COLLECTION).count
-pbar = tqdm(total=total_points, desc="Migrating points")
+pbar = tqdm(total=total_points, desc="Баримтуудыг шилжүүлж байна")
+
+# Qdrant scroll-ийг зөв ашиглахын тулд offset-ийг зөв тохируулах нь чухал
+offset = None
 
 while True:
-    result = qc.scroll(
+    records, next_offset = qc.scroll(
         collection_name=OLD_COLLECTION,
-        limit=BATCH_SIZE,
+        limit=100,
         offset=offset,
         with_payload=True
     )
-    records = result[0]
+    
     if not records:
         break
 
@@ -84,6 +89,8 @@ while True:
 
         text = rec.payload.get("text", "")
         metadata = {k: v for k, v in rec.payload.items() if k != "text"}
+        
+        # Эхлээд текстээс embedding үүсгэх
         vec = get_query_embedding_ollama(text)
 
         points_to_upsert.append(PointStruct(
@@ -91,14 +98,17 @@ while True:
             vector=vec,
             payload={"text": text, **metadata}
         ))
-        total_processed += 1
-        pbar.update(1)
 
-    # Upsert хийхээс өмнө жагсаалт хоосон эсэхийг шалгах
+    # Баримтуудыг бөөнөөр оруулах 
     if points_to_upsert:
         qc.upsert(collection_name=NEW_COLLECTION, points=points_to_upsert)
 
-    offset += len(records)
+
+    total_processed += len(points_to_upsert)
+    pbar.update(len(points_to_upsert))
+
+    # Дараагийн эргэлт хийхэд offset-ийг шинэчлэх
+    offset = next_offset
 
 pbar.close()
 print(f"\nMigration completed! Total points migrated: {total_processed}")

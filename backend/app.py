@@ -6,8 +6,6 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 import requests
-import json
-import subprocess
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -109,14 +107,30 @@ def query_ollama(prompt, model=CHAT_MODEL):
     return resp.json().get("response", "").strip()
 
 def generate_answer_ollama(question, docs):
-    """
-    Question + retrieved docs ашиглан Ollama model-оор хариулт үүсгэх
-    """
-    # Docs-ийг нэг текст болгон нийлүүлэх
-    context = "\n\n".join(d["text"] for d in docs)
-    print("context", context)
-    prompt = f"Question: {question}\n\nContext:\n{context}\n\nAnswer:"
+    """Ollama-г ашиглан хариулт үүсгэнэ."""
+    if not docs:
+        return "Олдсон мэдээлэл байхгүй тул хариулт өгөх боломжгүй."
+    
+    context_text = "\n".join([f"- {d.get('text', '')}" for d in docs])
+
+    # Монгол хэл дээр гарахыг зааварласан prompt
+    prompt = f"""
+Чи Монгол хэл дээр хариулах ёстой. 
+Асуулт болон өгөгдсөн мэдээлэлд үндэслэн зөвхөн Монгол хэлээр товч бөгөөд ойлгомжтой хариулт өг. 
+Хэрэв мэдээлэлд хариулт байхгүй бол "Мэдээлэл дутмаг байна" гэж хариул.
+
+Мэдээлэл:
+{context_text}
+
+Асуулт:
+{question}
+
+Хариулт (Монгол хэлээр):
+"""
+
     return query_ollama(prompt)
+
+
 
 # ===========================
 # API Endpoints
