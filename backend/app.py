@@ -17,7 +17,7 @@ load_dotenv()
 QDRANT_URL = os.getenv("QDRANT_URL")
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 
-COLLECTION_NAME = "policies_ollama"
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 CHAT_MODEL = os.getenv("CHAT_MODEL")
@@ -82,7 +82,7 @@ def retrieve_docs(question: str, top_k=5):
 
         for hit in sorted_hits:
             # Хариултын оноо 0.5-аас багагүй байх эсвэл хамааралгүй байвал хасах
-            if hit.score > 0.5:
+            if hit.score > 0.8:
                 payload = hit.payload or {}
                 results.append({
                     "source": "qdrant",
@@ -127,7 +127,7 @@ def generate_answer_ollama(question, docs):
 
 Хариулт (Монгол хэлээр):
 """
-
+    print("prompt : ", prompt)
     return query_ollama(prompt)
 
 

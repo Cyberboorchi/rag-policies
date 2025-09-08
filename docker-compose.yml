@@ -43,3 +43,6 @@ services:
 volumes:
   qdrant_storage:
   ollama_data:
+
+  
+
